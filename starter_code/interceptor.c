@@ -280,7 +280,7 @@ asmlinkage long interceptor(struct pt_regs reg) {
 	int monitored;
 	int is_monitored;
 	monitored = table[reg.ax].monitored;
-	monitored = 0; // 0 for this process is not monitored, 1 ow
+	is_monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(table[reg.ax].intercepted == 0){
 		printk("Should not get here, the process who calls interceptor must be already intercepted");
 		return 0;
