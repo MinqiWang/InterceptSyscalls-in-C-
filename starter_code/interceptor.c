@@ -281,8 +281,10 @@ asmlinkage long interceptor(struct pt_regs reg) {
 		printk("Should not get here, the process who calls interceptor must be already intercepted");
 		return 0;
 	}
-	int monitored = table[reg.ax].monitored;
-	int is_monitored = 0; // 0 for this process is not monitored, 1 ow
+	int monitored;
+	monitored = table[reg.ax].monitored;
+	int is_monitored;
+	monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(monitored == 1){
 		is_monitored = check_pid_monitored(reg.ax, current->pid);
 	}
@@ -348,9 +350,12 @@ asmlinkage long interceptor(struct pt_regs reg) {
  *   you might be holding, before you exit the function (including error cases!).  
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
-	mytable this_table = table[syscall]; // the struct for this syscall stored in table
-	int is_intercepted = this_table.intercepted;
-	int is_monitored = this_table.monitored;
+	mytable this_table;
+	this_table = table[syscall]; // the struct for this syscall stored in table
+	int is_intercepted;
+	is_intercepted = this_table.intercepted;
+	int is_monitored;
+	is_monitored = this_table.monitored;
 	// do all error checking before doing things
 	if(syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL){
 		return -EINVAL;
@@ -359,7 +364,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		if(current_uid() != 0){
 			return -EPERM;
 		}
-		if(is_intercpeted){
+		if(is_intercepted){
 			return -EBUSY;
 		}
 		// intercept this syscall
@@ -376,7 +381,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			return -EPERM;
 		}
 		if(!is_intercepted){ // cannot de-intercept if syscall is not intercepted yet
-			return -EINVAL
+			return -EINVAL;
 		}
 		// de-intercept this syscall
 		spin_lock(&pidlist_lock);
@@ -388,8 +393,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		spin_unlock(&pidlist_lock);
 	}
 	if(cmd == REQUEST_STOP_MONITORING){
-		if(!if_intercepted){ // cannot de-intercept if syscall is not intercepted yet
-			return -EINVAL
+		if(!is_intercepted){ // cannot stop monitoring for any pid if syscall is not intercepted yet
+			return -EINVAL;
 		}
 		if(pid !=0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL){
 			return -EINVAL;
@@ -400,7 +405,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			}
 			else{
 				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
-					return -EREPM;
+					return -EPERM;
 				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
 					if(!check_pid_monitored(syscall, pid)){
@@ -408,7 +413,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = del_pid_sysc(pid, syscall);
+					int err;
+					err = del_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -418,7 +424,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
+					int err;
+					err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -433,7 +440,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = del_pid_sysc(pid, syscall);
+					int err;
+					err = del_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -443,7 +451,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
+					int err;
+					err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -459,6 +468,9 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		}
 	}
 	if(cmd == REQUEST_START_MONITORING){
+		if(!is_intercepted){ // cannot start monitoring for any pid if syscall is not intercepted yet
+			return -EINVAL;
+		}
 		if(pid !=0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL){
 			return -EINVAL;
 		}
@@ -468,7 +480,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			}
 			else{
 				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
-					return -EREPM;
+					return -EPERM;
 				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
 					if(check_pid_monitored(syscall, pid)){ 
@@ -477,7 +489,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
 					table[syscall].monitored = 1;
-					int err = add_pid_sysc(pid, syscall);
+					int err;
+					err = add_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -487,7 +500,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
+					int err;
+					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -496,7 +510,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		else{ // we are at the root
 			if(pid != 0){
 				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
-					return -EREPM;
+					return -EPERM;
 				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
 					if(check_pid_monitored(syscall, pid)){ 
@@ -505,7 +519,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
 					table[syscall].monitored = 1;
-					int err = add_pid_sysc(pid, syscall);
+					int err;
+					err = add_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
@@ -515,7 +530,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
+					int err;
+					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
 				}
