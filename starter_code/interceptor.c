@@ -277,14 +277,14 @@ void my_exit_group(int status)
  * - Don't forget to call the original system call, so we allow processes to proceed as normal.
  */
 asmlinkage long interceptor(struct pt_regs reg) {
+	int monitored;
+	int is_monitored;
+	monitored = table[reg.ax].monitored;
+	monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(table[reg.ax].intercepted == 0){
 		printk("Should not get here, the process who calls interceptor must be already intercepted");
 		return 0;
 	}
-	int monitored;
-	monitored = table[reg.ax].monitored;
-	int is_monitored;
-	monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(monitored == 1){
 		is_monitored = check_pid_monitored(reg.ax, current->pid);
 	}
@@ -350,11 +350,12 @@ asmlinkage long interceptor(struct pt_regs reg) {
  *   you might be holding, before you exit the function (including error cases!).  
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
+	int err;
+	int is_intercepted;
+	int is_monitored;
 	mytable this_table;
 	this_table = table[syscall]; // the struct for this syscall stored in table
-	int is_intercepted;
 	is_intercepted = this_table.intercepted;
-	int is_monitored;
 	is_monitored = this_table.monitored;
 	// do all error checking before doing things
 	if(syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL){
@@ -413,7 +414,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = del_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -424,7 +424,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -440,7 +439,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = del_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -451,7 +449,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// stop monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = add_pid_sysc(pid, syscall); // add this pid to "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -489,7 +486,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
 					table[syscall].monitored = 1;
-					int err;
 					err = add_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -500,7 +496,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -519,7 +514,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
 					table[syscall].monitored = 1;
-					int err;
 					err = add_pid_sysc(pid, syscall);
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -530,7 +524,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 					// start monitoring for this pid
 					spin_lock(&pidlist_lock);
-					int err;
 					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
 					return err;
@@ -570,6 +563,7 @@ long (*orig_custom_syscall)(void);
  * - Ensure synchronization as needed.
  */
 static int init_function(void) {
+    int i;
 	// hijack MY_CUSTOM_SYSCALL and the exit_group system call
 	orig_custom_syscall = sys_call_table[MY_CUSTOM_SYSCALL];
 	orig_exit_group = sys_call_table[__NR_exit_group];
@@ -581,7 +575,6 @@ static int init_function(void) {
 	spin_unlock(&calltable_lock);
 	// initialize the table to keep track of all intercepted syscalls
 	spin_lock(&pidlist_lock);
-	int i;
 	for (i = 0; i < NR_syscalls; i++){ // should I make mytable null terminated?
 		mytable this_syscall;
 		this_syscall.f = sys_call_table[i];
@@ -606,10 +599,10 @@ static int init_function(void) {
  */
 static void exit_function(void)
 {
+	int i;
 	// Restore all original syscalls back
 	spin_lock(&calltable_lock);
 	set_addr_rw((unsigned long)sys_call_table);
-	int i;
 	for (i = 0; i < NR_syscalls; i++){
 		sys_call_table[i] = table[i].f;
 	}
