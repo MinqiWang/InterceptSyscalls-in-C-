@@ -283,7 +283,7 @@ asmlinkage long interceptor(struct pt_regs reg) {
 	is_monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(table[reg.ax].intercepted == 0){
 		printk("Should not get here, the process who calls interceptor must be already intercepted");
-		return 0;
+		return -1;
 	}
 	if(monitored == 1){
 		is_monitored = check_pid_monitored(reg.ax, current->pid);
@@ -387,6 +387,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		// de-intercept this syscall
 		spin_lock(&pidlist_lock);
 		table[syscall].intercepted = 0;
+		destroy_list(syscall);
+		table[syscall].monitored = 0;
 		// store back the original syscall
 		spin_lock(&calltable_lock);
 		sys_call_table[syscall] = table[syscall].f;
@@ -403,7 +405,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		if(current_uid() != 0){ // the root always has permission
 			if(pid == 0){ // monitoring all pids is not allowed except for root
 				return -EPERM;
-			}
+			}	
 			else{
 				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
 					return -EPERM;
@@ -575,13 +577,12 @@ static int init_function(void) {
 	spin_unlock(&calltable_lock);
 	// initialize the table to keep track of all intercepted syscalls
 	spin_lock(&pidlist_lock);
-	for (i = 0; i < NR_syscalls; i++){ // should I make mytable null terminated?
-		mytable this_syscall;
-		this_syscall.f = sys_call_table[i];
-		this_syscall.intercepted = 0;
-		this_syscall.monitored = 0;
-		this_syscall.listcount = 0;
-		INIT_LIST_HEAD(&(this_syscall.my_list));
+	for (i = 0; i < NR_syscalls; i++){
+		table[i].f = sys_call_table[i];
+		table[i].intercepted = 0;
+		table[i].monitored = 0;
+		table[i].listcount = 0;
+		INIT_LIST_HEAD(&(table[i].my_list));
 	}
 	spin_unlock(&pidlist_lock);
 	return 0;
