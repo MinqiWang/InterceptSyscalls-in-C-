@@ -282,8 +282,7 @@ asmlinkage long interceptor(struct pt_regs reg) {
 	monitored = table[reg.ax].monitored;
 	is_monitored = 0; // 0 for this process is not monitored, 1 ow
 	if(table[reg.ax].intercepted == 0){
-		printk("Should not get here, the process who calls interceptor must be already intercepted");
-		return -1;
+		is_monitored = 0;
 	}
 	if(monitored == 1){
 		is_monitored = check_pid_monitored(reg.ax, current->pid);
@@ -292,7 +291,7 @@ asmlinkage long interceptor(struct pt_regs reg) {
 		is_monitored = !check_pid_monitored(reg.ax, current->pid); // 0 for this process is on the "blacklist"(not monitored), 1 ow
 	}
 	else{ // monitored=0
-		printk("no pid is monitored");
+		is_monitored = 0;
 	}
 	if(is_monitored){ // if current->pid is monitered for this syscall, then print to the log
 		log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
@@ -380,6 +379,9 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 	if(cmd == REQUEST_SYSCALL_RELEASE){
 		if(current_uid() != 0){
 			return -EPERM;
+		}
+		if(!is_intercepted){ // cannot de-intercept if syscall is not intercepted yet
+			return -EINVAL;
 		}
 		// de-intercept this syscall
 		spin_lock(&pidlist_lock);
