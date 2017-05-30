@@ -405,12 +405,12 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		if(pid !=0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL){
 			return -EINVAL;
 		}
-		if(current_uid() != 0){ // the root always has permission
-			if(pid == 0){ // monitoring all pids is not allowed except for root
+		if(current_uid() != 0){ // non-root monitor
+			if(pid == 0){ // stop monitoring all pids is not allowed except for root
 				return -EPERM;
 			}	
 			else{
-				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
+				if(check_pid_from_list(current->pid, pid) != 0){ // check if this given pid is owned by the calling process
 					return -EPERM;
 				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
@@ -476,12 +476,12 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		if(pid !=0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL){
 			return -EINVAL;
 		}
-		if(current_uid() != 0){ // the root always has permission
+		if(current_uid() != 0){ // non-root monitor
 			if(pid == 0){ // monitoring all pids is not allowed except for root
 				return -EPERM;
 			}
 			else{
-				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
+				if(check_pid_from_list(current->pid, pid)!= 0){ // check if this given pid is owned by the calling process
 					return -EPERM;
 				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
@@ -503,15 +503,14 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					spin_lock(&pidlist_lock);
 					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
-					return err;
+					if(err == -1){
+						return -EINVAL;
+					}
 				}
 			}
 		}
 		else{ // we are at the root
 			if(pid != 0){
-				if(!check_pid_from_list(current->pid, pid)){ // check if this given pid is owned by the calling process
-					return -EPERM;
-				}
 				if(is_monitored != 2){ // the list is not "black-list", check if pid is on the list, aka is monitored
 					if(check_pid_monitored(syscall, pid)){ 
 						return -EBUSY;
@@ -531,7 +530,9 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					spin_lock(&pidlist_lock);
 					err = del_pid_sysc(pid, syscall); // delete this pid from the "black-list"
 					spin_unlock(&pidlist_lock);
-					return err;
+					if(err == -1){
+						return -EINVAL;
+					}
 				}
 			}
 			else{
