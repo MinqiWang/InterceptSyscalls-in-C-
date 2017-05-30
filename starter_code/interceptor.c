@@ -381,9 +381,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		if(current_uid() != 0){
 			return -EPERM;
 		}
-		if(!is_intercepted){ // cannot de-intercept if syscall is not intercepted yet
-			return -EINVAL;
-		}
 		// de-intercept this syscall
 		spin_lock(&pidlist_lock);
 		table[syscall].intercepted = 0;
